@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, ServicePackage, Booking, ServiceType, AiPlanResponse } from './types';
-import { mockDb, SERVICES } from './services/mockDatabase';
+import { User, ServicePackage, ServiceType, AiPlanResponse } from './types';
+import { api } from './services/api'; // SWITCHED TO REAL API
+import { SERVICES } from './services/mockDatabase'; // Keeping static service data
 import Navbar from './components/Navbar';
 import AiPlanner from './components/AiPlanner';
 import Dashboard from './components/Dashboard';
@@ -10,8 +11,6 @@ import {
   MapPin, Phone, Instagram, Facebook, Calendar, IndianRupee, CreditCard, Loader2, AlertTriangle, Settings
 } from 'lucide-react';
 
-// --- EMAILJS CONFIGURATION ---
-// NOTE: These keys are now hardcoded for the specific Tirupalappa Events account.
 const EMAILJS_SERVICE_ID = "service_eventhub"; 
 const EMAILJS_TEMPLATE_ID = "template_xtga95a"; 
 const EMAILJS_PUBLIC_KEY = "_c2Uq-Lh-ttenyFGS"; 
@@ -41,14 +40,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin }) => {
     try {
       let user;
       if (isSignup) {
-        user = await mockDb.signup(name, email, password);
+        user = await api.signup(name, email, password);
       } else {
-        user = await mockDb.login(email, password);
+        user = await api.login(email, password);
       }
       onLogin(user);
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -99,6 +98,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin }) => {
             {isSignup ? 'Login' : 'Sign Up'}
           </button>
         </div>
+        <div className="mt-4 text-xs text-center text-gray-400 border-t pt-2">
+          For Admin/Agency Demo: Login as <b>admin@eventhub.com</b>
+        </div>
       </div>
     </div>
   );
@@ -120,14 +122,6 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [isEmailSuccess, setIsEmailSuccess] = useState(true);
 
-  // Email Config State
-  const [emailConfig, setEmailConfig] = useState({
-    serviceId: EMAILJS_SERVICE_ID,
-    templateId: EMAILJS_TEMPLATE_ID,
-    publicKey: EMAILJS_PUBLIC_KEY
-  });
-  const [showConfig, setShowConfig] = useState(false);
-
   // Payment State
   const [cardNum, setCardNum] = useState('');
   const [cardName, setCardName] = useState('');
@@ -139,24 +133,6 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
       setStep(1);
       setStatusMsg('');
       setIsEmailSuccess(true);
-      
-      // Prioritize valid hardcoded constants
-      if (!EMAILJS_PUBLIC_KEY.includes('INSERT') && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID) {
-        setEmailConfig({
-          serviceId: EMAILJS_SERVICE_ID,
-          templateId: EMAILJS_TEMPLATE_ID,
-          publicKey: EMAILJS_PUBLIC_KEY
-        });
-        localStorage.removeItem('tirupalappa_email_config');
-      } else {
-        const savedConfig = localStorage.getItem('tirupalappa_email_config');
-        if (savedConfig) {
-          setEmailConfig(JSON.parse(savedConfig));
-        } else {
-          setShowConfig(true);
-        }
-      }
-
       if (user) {
         setCardName(user.name);
         setCardNum('');
@@ -165,11 +141,6 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
       }
     }
   }, [isOpen, user]);
-
-  const saveConfig = () => {
-    localStorage.setItem('tirupalappa_email_config', JSON.stringify(emailConfig));
-    setShowConfig(false);
-  };
 
   if (!isOpen || !service) return null;
 
@@ -188,8 +159,8 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
     setStatusMsg('Processing Payment...');
 
     try {
-      // 1. Save to Mock DB
-      await mockDb.createBooking({
+      // 1. Save to Real Backend via API
+      await api.createBooking({
         userId: user.id,
         userName: user.name,
         userEmail: user.email,
@@ -204,70 +175,30 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
       setStatusMsg('Sending Confirmation Email...');
       
       try {
-        // Check if config is valid before sending
-        if (emailConfig.publicKey.includes('INSERT') || !emailConfig.serviceId) {
-             throw { text: 'Configuration Missing or Invalid. Please check App.tsx constants.' };
-        }
-
-        console.log("Sending email...", { 
-          service: emailConfig.serviceId, 
-          template: emailConfig.templateId 
-        });
-
         await emailjs.send(
-          emailConfig.serviceId,
-          emailConfig.templateId,
+          EMAILJS_SERVICE_ID,
+          EMAILJS_TEMPLATE_ID,
           {
             to_name: user.name,
-            email: user.email, // Matched to {{email}} in template "To Email" field
-            to_email: user.email, // Backup
+            email: user.email,
             event_name: service.title,
             date: new Date(date).toDateString(),
             amount: totalCost.toLocaleString(),
             reply_to: 'thirupalappaeventhub@gmail.com'
           },
-          emailConfig.publicKey
+          EMAILJS_PUBLIC_KEY
         );
         setStatusMsg(`Confirmation Email Sent to ${user.email}!`);
         setIsEmailSuccess(true);
       } catch (emailError: any) {
         console.error("EmailJS Error:", emailError);
         setIsEmailSuccess(false);
-        
-        let msg = "Unknown Error";
-        
-        // Robust Error Extraction to avoid [object Object]
-        if (emailError) {
-            if (typeof emailError === 'string') {
-                msg = emailError;
-            } else if (emailError.text) {
-                msg = emailError.text; // Standard EmailJS error text
-            } else if (emailError.message) {
-                msg = emailError.message; // Standard JS Error message
-            } else if (emailError.status === 0) {
-                 msg = "Network Blocked (Check AdBlocker or Connection)";
-            } else {
-                try {
-                    msg = JSON.stringify(emailError);
-                    if (msg === '{}') msg = "API Response Empty (Network Issue)";
-                } catch (e) {
-                    msg = "Unserializable Error Object";
-                }
-            }
-        }
-        
-        if (emailError?.status === 412) {
-          setStatusMsg('Error 412: Gmail permissions missing. Reconnect Gmail in EmailJS and check "Send on behalf".');
-        } else if (emailError?.status === 400) {
-           setStatusMsg(`Error 400: Invalid Keys/Params. Details: ${msg}`);
-        } else {
-          setStatusMsg(`Booking Saved. Email Failed: ${msg}`);
-        }
+        setStatusMsg('Booking Saved. Email Failed (Network Issue).');
       }
 
       setStep(3);
-    } catch (e) {
-      alert("Payment processing failed. Please try again.");
+    } catch (e: any) {
+      alert("Payment processing failed: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -295,49 +226,11 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
         <div className="bg-slate-900 p-4 flex justify-between items-center text-white sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <h3 className="font-playfair text-lg font-bold">Book: {service.title}</h3>
-            {step === 1 && (
-              <button onClick={() => setShowConfig(!showConfig)} className="text-gray-400 hover:text-white" title="Configure Email">
-                <Settings className="h-4 w-4" />
-              </button>
-            )}
           </div>
           <button onClick={onClose}><X className="h-5 w-5" /></button>
         </div>
 
         <div className="p-6">
-          {/* Runtime Configuration Panel */}
-          {step === 1 && showConfig && (
-            <div className="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-300 text-sm">
-              <h4 className="font-bold text-slate-800 mb-2 flex items-center">
-                <Settings className="h-4 w-4 mr-1" /> Email Configuration
-              </h4>
-              <p className="text-xs text-slate-500 mb-3">Paste your EmailJS keys here to enable real emails.</p>
-              <div className="space-y-2">
-                <input 
-                  placeholder="Service ID (e.g. service_xyz)" 
-                  className="w-full p-2 border rounded"
-                  value={emailConfig.serviceId}
-                  onChange={e => setEmailConfig({...emailConfig, serviceId: e.target.value})}
-                />
-                <input 
-                  placeholder="Template ID (e.g. template_abc)" 
-                  className="w-full p-2 border rounded"
-                  value={emailConfig.templateId}
-                  onChange={e => setEmailConfig({...emailConfig, templateId: e.target.value})}
-                />
-                <input 
-                  placeholder="Public Key (e.g. user_123)" 
-                  className="w-full p-2 border rounded"
-                  value={emailConfig.publicKey}
-                  onChange={e => setEmailConfig({...emailConfig, publicKey: e.target.value})}
-                />
-                <button onClick={saveConfig} className="w-full bg-slate-800 text-white py-1 rounded mt-2 hover:bg-slate-700">
-                  Save Configuration
-                </button>
-              </div>
-            </div>
-          )}
-
           {step === 1 && (
             <div className="space-y-4">
               <div>
@@ -496,14 +389,6 @@ const BookingModal: React.FC<BookingModalProps> = ({ service, user, isOpen, onCl
                 <span className={`font-semibold ${isEmailSuccess ? 'text-indigo-600' : 'text-amber-600'}`}>{statusMsg}</span>
               </p>
 
-              <div className="bg-gray-50 p-4 rounded-lg mb-6 text-sm text-gray-500">
-                {isEmailSuccess ? (
-                   <p>A confirmation email has been triggered to <b>{user.email}</b>.</p>
-                ) : (
-                   <p>Your slot is confirmed in our database, but the email receipt failed to send due to technical configuration.</p>
-                )}
-              </div>
-
               <button onClick={onClose} className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition">
                 Return to Dashboard
               </button>
@@ -540,6 +425,7 @@ const App = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('tirupalappa_current_user');
+    localStorage.removeItem('token'); // Clear JWT
     setActiveTab('home');
   };
 
@@ -550,7 +436,6 @@ const App = () => {
 
   const handleAiBooking = (plan: AiPlanResponse, eventType: string, budget: string) => {
     let estimatedPrice = 25000;
-    // Rough estimate based on user preference
     if (budget === 'Low') estimatedPrice = 15000;
     if (budget === 'High') estimatedPrice = 80000;
   
@@ -637,7 +522,6 @@ const App = () => {
         {SERVICES.map(service => (
           <div key={service.id} className="bg-white rounded-xl shadow-lg overflow-hidden group hover:shadow-xl transition-all duration-300">
             <div className="relative h-48 overflow-hidden bg-gray-200">
-              {/* Smart Image Fallback Logic */}
               <img 
                 src={service.image} 
                 alt={service.title} 
@@ -647,7 +531,7 @@ const App = () => {
                   if (service.fallbackImage && target.src !== service.fallbackImage) {
                     target.src = service.fallbackImage;
                   } else {
-                    target.style.display = 'none'; // Hide if even fallback fails
+                    target.style.display = 'none';
                   }
                 }}
               />
@@ -710,43 +594,13 @@ const App = () => {
             <ul className="space-y-2 text-sm">
               <li className="flex items-center"><Mail className="h-4 w-4 mr-2"/> thirupalappaeventhub@gmail.com</li>
               <li className="flex items-center"><Phone className="h-4 w-4 mr-2"/> +91 98765 43210</li>
-              <li className="flex items-center"><MapPin className="h-4 w-4 mr-2"/> Bangalore, Karnataka</li>
             </ul>
           </div>
-          <div>
-            <h4 className="text-white text-lg font-bold mb-4">Quick Links</h4>
-            <ul className="space-y-2 text-sm">
-              <li><button onClick={() => setActiveTab('services')} className="hover:text-amber-500">Weddings</button></li>
-              <li><button onClick={() => setActiveTab('services')} className="hover:text-amber-500">Birthdays</button></li>
-              <li><button onClick={() => setActiveTab('services')} className="hover:text-amber-500">Corporate</button></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-white text-lg font-bold mb-4">Social</h4>
-            <div className="flex space-x-4">
-              <Instagram className="h-6 w-6 cursor-pointer hover:text-pink-500" />
-              <Facebook className="h-6 w-6 cursor-pointer hover:text-blue-500" />
-            </div>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto px-4 mt-8 pt-8 border-t border-slate-800 text-center text-sm">
-          &copy; {new Date().getFullYear()} Tirupalappa Events & Decorations. All rights reserved.
         </div>
       </footer>
 
-      <AuthModal 
-        isOpen={isAuthOpen} 
-        onClose={() => setIsAuthOpen(false)} 
-        onLogin={handleLogin} 
-      />
-      
-      <BookingModal 
-        isOpen={isBookingOpen} 
-        onClose={() => setIsBookingOpen(false)} 
-        service={selectedService} 
-        user={user}
-        onOpenAuth={() => { setIsBookingOpen(false); setIsAuthOpen(true); }}
-      />
+      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLogin={handleLogin} />
+      <BookingModal isOpen={isBookingOpen} onClose={() => setIsBookingOpen(false)} service={selectedService} user={user} onOpenAuth={() => { setIsBookingOpen(false); setIsAuthOpen(true); }} />
     </div>
   );
 };
