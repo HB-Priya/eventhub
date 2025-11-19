@@ -1,8 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AiPlanResponse } from '../types';
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// NOTE: We do NOT initialize the client globally here.
+// Doing so causes the app to crash immediately if the API key is missing or not loaded yet.
 
 export const generateEventPlan = async (
   eventType: string, 
@@ -10,6 +10,18 @@ export const generateEventPlan = async (
   preferences: string
 ): Promise<AiPlanResponse> => {
   try {
+    // 1. Access the key inside the function scope
+    const apiKey = process.env.API_KEY;
+
+    // 2. Check if key exists
+    if (!apiKey) {
+      console.warn("Gemini API Key is missing. Switching to offline fallback mode.");
+      throw new Error("API Key is missing");
+    }
+
+    // 3. Initialize the client only when needed
+    const ai = new GoogleGenAI({ apiKey });
+
     const prompt = `
       Act as an expert event planner for "Tirupalappa Events".
       Create a brief event plan for a ${eventType}.
@@ -45,8 +57,9 @@ export const generateEventPlan = async (
 
   } catch (error) {
     console.error("AI Planning Error:", error);
+    // Return fallback data so the user still sees a result
     return {
-      theme: "Classic Celebration",
+      theme: "Classic Celebration (Offline Mode)",
       suggestions: ["Standard Floral Decor", "Buffet Setup", "Welcome Drinks", "Light Music"],
       estimatedBudgetRange: "Consult for price"
     };
