@@ -11,7 +11,6 @@ export const generateEventPlan = async (
 ): Promise<AiPlanResponse> => {
   try {
     // 1. Access the key inside the function scope
-    // The define in vite.config.ts replaces process.env.API_KEY with the string value
     const apiKey = process.env.API_KEY;
 
     // 2. Check if key exists
