@@ -99,7 +99,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin }) => {
           </button>
         </div>
         <div className="mt-4 text-xs text-center text-gray-400 border-t pt-2">
-          For Admin/Agency Demo: Login as <b>admin@eventhub.com</b>
+          For Admin/Agency Demo: Login as <b>thirupalappaeventhub@gmail.com</b>
         </div>
       </div>
     </div>
