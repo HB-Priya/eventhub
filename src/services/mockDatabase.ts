@@ -78,7 +78,8 @@ export const mockDb = {
     }
 
     // Check if this is the Admin
-    const isAdmin = email === 'admin@eventhub.com' || email === 'thirupalappaeventhub@gmail.com';
+    // UPDATED: Using the business email as the admin identifier
+    const isAdmin = email === 'thirupalappaeventhub@gmail.com';
 
     const newUser: User = { id: Date.now().toString(), name, email, isAdmin };
     users.push({ ...newUser, password }); // In real app, hash password
@@ -93,7 +94,8 @@ export const mockDb = {
     const users: any[] = usersStr ? JSON.parse(usersStr) : [];
     
     // Admin simulation check if not found in local DB (for demo convenience)
-    if (email === 'admin@eventhub.com') {
+    // UPDATED: Changed to the business email
+    if (email === 'thirupalappaeventhub@gmail.com') {
       return { id: 'admin-001', name: 'Agency Admin', email, isAdmin: true };
     }
 
