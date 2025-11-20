@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { generateEventPlan } from '../services/geminiService';
+import { generateEventPlan } from '../services/eventPlannerAi';
 import { AiPlanResponse } from '../types';
 import { Wand2, Loader2, CheckCircle, Sparkles, Calendar } from 'lucide-react';
 
