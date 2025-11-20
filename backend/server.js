@@ -33,7 +33,8 @@ app.post('/api/auth/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // Hardcode admin logic for specific email for demo purposes
-    const isAdmin = email === 'admin@eventhub.com';
+    // UPDATED: Changed to business email
+    const isAdmin = email === 'thirupalappaeventhub@gmail.com';
 
     const newUser = new User({ name, email, password: hashedPassword, isAdmin });
     await newUser.save();
