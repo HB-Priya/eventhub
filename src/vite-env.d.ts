@@ -2,6 +2,7 @@
 
 declare namespace NodeJS {
   interface ProcessEnv {
-    readonly API_KEY: string;
+    API_KEY: string;
+    [key: string]: any;
   }
 }
